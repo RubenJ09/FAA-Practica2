@@ -21,6 +21,14 @@ class Clasificador(ABC):
 
         return numErrores / len(clasesReales)
 
+    def matrizConfusion(self, clasesReales, clasesPredichas):
+        matriz = np.zeros((2, 2), dtype=int)
+
+        for real, predicha in zip(clasesReales, clasesPredichas):
+            matriz[int(real), int(predicha)] += 1
+
+        return matriz
+
     def validacionErrores(self, estrategia, datos):
         particiones = estrategia.crearParticiones(datos)
         errores = []
@@ -144,3 +152,34 @@ class ClasificadorKNN(Clasificador):
             predicciones.append(clase_mayoritaria)
 
         return predicciones
+
+
+class ClasificadorRegresionLogistica(Clasificador):
+    def __init__(self, tasaAprendizaje=0.01, pasos=1000):
+        self.tasaAprendizaje = tasaAprendizaje
+        self.pasos = pasos
+        self.pesos = None
+
+    def sigmoide(self, valores):
+        valores = np.clip(valores, -500, 500)
+        return 1 / (1 + np.exp(-valores))
+
+    def entrenamiento(self, datosTrain, clasesTrain):
+        datos = datosTrain.to_numpy()
+        datos = np.column_stack((np.ones(len(datos)), datos))
+        clases = np.asarray(clasesTrain)
+
+        self.pesos = np.zeros(datos.shape[1])
+
+        for _ in range(self.pasos):
+            probabilidades = self.sigmoide(datos @ self.pesos)
+            self.pesos += self.tasaAprendizaje * (datos.T @ (clases - probabilidades)) / len(datos)
+
+    def probabilidades(self, datosTest):
+        datos = datosTest.to_numpy()
+        datos = np.column_stack((np.ones(len(datos)), datos))
+        return self.sigmoide(datos @ self.pesos)
+
+    def clasifica(self, datosTest):
+        probabilidades = self.probabilidades(datosTest)
+        return (probabilidades >= 0.5).astype(int)
