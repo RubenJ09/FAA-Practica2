@@ -129,6 +129,46 @@ class ClasificadorNaiveBayes(Clasificador):
 
         return predicciones
 
+    def probabilidades(self, datosTest):
+        probabilidades = []
+
+        for _, fila in datosTest.iterrows():
+            log_probs = []
+
+            for c in self.clases:
+                log_prob = np.log(self.priors[c])
+                for col in self.columnas:
+                    val = fila[col]
+                    if col in self.stats_cont[c]:
+                        media, var = self.stats_cont[c][col]
+                        std = np.sqrt(var)
+                        p = norm.pdf(val, loc=media, scale=std)
+                        if p == 0:
+                            p = 1e-9
+                        log_prob += np.log(p)
+                    else:
+                        conteo = self.stats_cat[c][col]
+                        total_c = sum(conteo.values())
+                        n_val = conteo.get(val, 0)
+                        n_unicos = len(set(v for dic in self.stats_cat.values() for v in dic[col].keys()))
+                        if self.laplace:
+                            prob_val = (n_val + 1) / (total_c + n_unicos)
+                        else:
+                            prob_val = n_val / total_c if total_c > 0 else 0
+                            if prob_val == 0:
+                                prob_val = 1e-9
+                        log_prob += np.log(prob_val)
+                log_probs.append(log_prob)
+            log_probs = np.array(log_probs)
+
+            probs = np.exp(log_probs - np.max(log_probs))
+            probs = probs / np.sum(probs)
+
+            indice_clase_1 = np.where(self.clases == 1)[0][0]
+            probabilidades.append(probs[indice_clase_1])
+
+        return np.array(probabilidades)
+
 
 class ClasificadorKNN(Clasificador):
     def __init__(self, k=5):
@@ -152,6 +192,24 @@ class ClasificadorKNN(Clasificador):
             predicciones.append(clase_mayoritaria)
 
         return predicciones
+
+    def probabilidades(self, datosTest):
+        probabilidades = []
+        test_vals = datosTest.values
+
+        for fila in test_vals:
+            distancias = np.sqrt(
+                np.sum((self.datosTrain - fila) ** 2, axis=1)
+            )
+
+            indices_vecinos = np.argsort(distancias)[:self.k]
+            clases_vecinos = self.clasesTrain[indices_vecinos]
+
+            probabilidad = np.sum(clases_vecinos == 1) / len(clases_vecinos)
+            probabilidades.append(probabilidad)
+
+        return np.array(probabilidades)
+
 
 
 class ClasificadorRegresionLogistica(Clasificador):
